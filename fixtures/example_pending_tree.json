@@ -1,0 +1,29 @@
+{
+  "example-task": {
+    "root": {
+      "node_id": 0,
+      "status": "root",
+      "value": null,
+      "sandbox_id": null,
+      "children": {
+        "setup-A": {
+          "node_id": 7,
+          "status": "ready",
+          "generation": 1,
+          "value": "setup A",
+          "sandbox_id": null,
+          "children": {
+            "read-fixture": {
+              "node_id": 12,
+              "status": "pending",
+              "generation": 1,
+              "value": null,
+              "sandbox_id": null,
+              "children": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

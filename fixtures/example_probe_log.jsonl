@@ -1,0 +1,12 @@
+{"event":"run_start","run_id":"synthetic-example","seq":0,"ts_ns":0,"schema_version":1,"capture_mode":"correctness","events_complete":true}
+{"event":"tree_snapshot","run_id":"synthetic-example","seq":1,"ts_ns":100,"task_id":"example-task","stage":"before","dump":{"example-task":{"root":{"node_id":0,"status":"root","children":{}}}}}
+{"event":"claim","run_id":"synthetic-example","seq":2,"ts_ns":200,"task_id":"example-task","path":["read-fixture"],"node_id":1,"generation":1,"attempt_id":"a1","outcome":"owner"}
+{"event":"execute_start","run_id":"synthetic-example","seq":3,"ts_ns":300,"task_id":"example-task","path":["read-fixture"],"node_id":1,"generation":1,"attempt_id":"a1"}
+{"event":"claim","run_id":"synthetic-example","seq":4,"ts_ns":400,"task_id":"example-task","path":["read-fixture"],"node_id":1,"generation":1,"attempt_id":"a2","outcome":"pending"}
+{"event":"tree_snapshot","run_id":"synthetic-example","seq":5,"ts_ns":500,"task_id":"example-task","stage":"pending","dump":{"example-task":{"root":{"node_id":0,"status":"root","children":{"read-fixture":{"node_id":1,"status":"pending","generation":1,"value":null,"children":{}}}}}}}
+{"event":"execute_end","run_id":"synthetic-example","seq":6,"ts_ns":600,"task_id":"example-task","path":["read-fixture"],"node_id":1,"generation":1,"attempt_id":"a1"}
+{"event":"publish","run_id":"synthetic-example","seq":7,"ts_ns":700,"task_id":"example-task","path":["read-fixture"],"node_id":1,"generation":1,"attempt_id":"a1","status":"ready","value_present":true}
+{"event":"tree_snapshot","run_id":"synthetic-example","seq":8,"ts_ns":800,"task_id":"example-task","stage":"ready","dump":{"example-task":{"root":{"node_id":0,"status":"root","children":{"read-fixture":{"node_id":1,"status":"ready","generation":1,"value":"","children":{}}}}}}}
+{"event":"claim","run_id":"synthetic-example","seq":9,"ts_ns":900,"task_id":"example-task","path":["read-fixture"],"node_id":1,"generation":1,"attempt_id":"a3","outcome":"ready"}
+{"event":"tree_snapshot","run_id":"synthetic-example","seq":10,"ts_ns":1000,"task_id":"example-task","stage":"warm","dump":{"example-task":{"root":{"node_id":0,"status":"root","children":{"read-fixture":{"node_id":1,"status":"ready","generation":1,"value":"","children":{}}}}}}}
+{"event":"run_end","run_id":"synthetic-example","seq":11,"ts_ns":1100,"completed":true,"dropped_events":0}
