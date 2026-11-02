@@ -216,7 +216,7 @@ async def run_pending(
     report.update({"case": case, "task_id": namespace, "status": "running", "limitations": [
         "Controlled tool fixtures: no real sandbox restoration or model behavior is tested.",
         "Call-ID/harness response mapping is not tested by these low-level scenarios.",
-        "Failure/takeover scenarios are specified but not implemented yet.",
+        "T01/T02 do not exercise failure/takeover; integration runs separate protocol cases.",
     ]})
 
     async def scenario() -> dict:

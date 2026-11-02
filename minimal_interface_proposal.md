@@ -2,6 +2,12 @@
 
 Draft for Arjun and Chia-Heng · October 28, 2026
 
+Historical proposal. As of November 1, the [implementation contract](https://github.com/cs5470-team9/tvcache-rust/blob/aa239b6a3b64c485b0189f55ced19926dd6df621/docs/pending_nodes.md)
+and [live integration status](integration_status.md) supersede open questions
+below. Real ownership is connection-bound; the adapter uses only a local marker.
+The implementation encodes the root as ready/null with generation 0, which is
+explicitly normalized on the test side without inventing IDs or generations.
+
 The aim is to expose enough information for correctness tests without adding
 expensive state hashing, a second graph index, or a new diagnostics service.
 This is a proposed contract; the pending-node interface is not implemented yet.

@@ -108,3 +108,54 @@ class CommandLineTests(unittest.TestCase):
             result = self.run_cli("probes", target)
             self.assertEqual(result.returncode, 1, result.stderr + result.stdout)
             self.assertIn("Multiple executions", json.loads(result.stdout)["error"])
+
+    def test_team_tree_normalization_preserves_real_root_generation(self):
+        raw = {"task": {"root": {"node_id": 0, "status": "ready", "generation": 0,
+                "value": None, "children": {"call": {"node_id": 4, "status": "ready",
+                "generation": 1, "value": "", "children": {}}}}}}
+        with tempfile.TemporaryDirectory(prefix="tvcache-cli-") as directory:
+            source = Path(directory) / "team.json"
+            source.write_text(json.dumps(raw))
+            result = self.run_cli("tree", source, "--task-id", "task", "--team-format")
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            nodes = json.loads(result.stdout)["snapshot"]["nodes"]
+            self.assertEqual((nodes[0]["state"], nodes[0]["generation"]), ("root", 0))
+            self.assertEqual((nodes[1]["node_id"], nodes[1]["value"]), (4, ""))
+
+    def test_server_launch_requires_explicit_opt_in(self):
+        with tempfile.TemporaryDirectory(prefix="tvcache-cli-") as directory:
+            target = Path(directory) / "report.json"
+            result = self.run_cli("integration", "--server-source", directory,
+                                  "--client-source", directory, "--output", target)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("--launch-local-server", result.stderr)
+            self.assertFalse(target.exists())
+
+    def test_existing_integration_report_blocks_all_work(self):
+        with tempfile.TemporaryDirectory(prefix="tvcache-cli-") as directory:
+            target = Path(directory) / "report.json"
+            target.write_text("existing evidence")
+            result = self.run_cli("integration", "--launch-local-server", "--server-source", directory,
+                                  "--client-source", directory, "--output", target, "--summary")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("Refusing to overwrite", result.stderr)
+            self.assertEqual(target.read_text(), "existing evidence")
+
+    def test_only_one_pending_adapter_source_can_be_selected(self):
+        with tempfile.TemporaryDirectory(prefix="tvcache-cli-") as directory:
+            result = self.run_cli("pending", "--dedicated-server", "--adapter", "other:factory",
+                                  "--client-source", directory, "--output", Path(directory) / "out.json")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("not allowed with argument", result.stderr)
+
+    def test_client_without_pending_api_blocks_before_connection(self):
+        with tempfile.TemporaryDirectory(prefix="tvcache-cli-") as directory:
+            source = Path(directory)
+            (source / "tvclient").mkdir()
+            (source / "tvclient/__init__.py").touch()
+            # Only an API-shape fixture, not a fake cache or running client.
+            (source / "tvclient/client.py").write_text("class TVCacheClient:\n    pass\n")
+            result = self.run_cli("pending", "--dedicated-server", "--client-source", source,
+                                  "--output", source / "out.json")
+            self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
+            self.assertIn("lacks pending-node methods", json.loads(result.stdout)["error"])

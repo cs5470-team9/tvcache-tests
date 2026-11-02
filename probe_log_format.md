@@ -111,8 +111,14 @@ mapping, side-effect restoration, crash safety, or exactly-once external effects
 
 ## Next integration step
 
-Agree on field mappings and cheap capture points with the implementation owner.
-The current sequential `Find/Insert` baseline has no pending lifecycle API, so
-do not synthesize owner/pending events or node IDs to make it pass. Its saved
-tree can be inspected with `tree --legacy`; its output/performance logs remain
-useful as baseline evidence without claiming pending-node coverage.
+The team's `pending-nodes` branches now expose real node IDs, lifecycle states,
+Claim/Inspect/Publish, and checkpoint dumps. The adapter and live correctness
+cases are connected; see [integration_status.md](integration_status.md).
+They do not yet emit this complete JSONL format. Agree on cheap capture points
+and multi-producer causal references with the harness/evaluation owners before
+treating rollout logs as complete evidence.
+
+The sequential `Find/Insert` baseline on the implementation `main` branches
+still has no pending API. Do not synthesize owner/pending events or node IDs to
+make that baseline pass. Its saved tree can be inspected with `tree --legacy`;
+its existing output/performance logs remain useful without claiming coalescing.

@@ -6,17 +6,20 @@ Scope: Team 9's current project proposal, step 4. Start with
 single-key coalescing, then test the initial whole-turn implementation. Per-call
 and hybrid layouts are later comparisons, not prerequisites for the first tests.
 
-Status: the tree checker, sequential-baseline smoke check, and adapter-based
-T01/T02 scenarios are implemented; see [README.md](README.md) for commands.
-The inspected course server has Find/Insert operations but no pending-node
-claim/wait interface. No pending-node runtime test has run or passed against a
-real cache. API names below describe the test adapter, not existing wire methods.
+November 1 status: the team `pending-nodes` client/server are connected and
+live CPU checks pass for T01–T07, T09, and I01 (read-only inspection), plus the
+sequential smoke check. See [integration_status.md](integration_status.md) and
+[README.md](README.md) for revisions and commands. T01 passed at 8 and 32 callers.
+The matrix below remains the broader plan: unlisted cases are not claimed as
+passed. Adapter method names are test-side names; real wire methods are
+Claim/Inspect/Publish, with connection-bound ownership.
 
 ## First handoff to Arjun
 
-Agree on the pending-node interface and recovery policy before wiring tests to
-the real client/server. The testbench should exercise the actual cache, not
-introduce a second cache implementation that could pass its own tests.
+The initial interface/recovery policy is documented in the team's
+[implementation contract](https://github.com/cs5470-team9/tvcache-rust/blob/aa239b6a3b64c485b0189f55ced19926dd6df621/docs/pending_nodes.md).
+The connected testbench exercises that actual cache, not a second cache
+implementation that could pass its own tests.
 
 The first two tests are T01 and T02. They need no model, GPU, DeepSWE container,
 or real filesystem snapshot: use controlled tool execution with known inputs,
@@ -28,7 +31,9 @@ sandbox adapter and coordination with Joseph.
 Concrete low-cost draft: [minimal_interface_proposal.md](minimal_interface_proposal.md).
 Add monotonic per-task node IDs to claim/lookup responses and the existing
 tree dump. The testbench will verify tree shape and node lifecycles as well
-as outputs. This remains a proposal, not an implemented server API.
+as outputs. The original proposal is retained as background; the current
+adapter maps to the implemented contract and retains raw metadata beside
+normalization.
 
 These are behaviors to agree on, not a prescription for wire opcodes or storage.
 
@@ -190,9 +195,11 @@ the existing client documents sequential requests on each persistent connection.
 - Which events can tests observe, and which result/call-ID mapping belongs in
   the cache client versus the harness?
 
-No final wire method names, response schemas, TTL values, or timeout durations
-have been agreed with Arjun. The adapter-based scenarios are ready to connect
-after that agreement; do not report testbench self-tests as real-cache coverage.
+Claim/Inspect/Publish, node metadata, ownership fencing, terminal failure,
+disconnect handling, and long-poll behavior are implemented and connected at
+the pinned revisions. Later layout, harness, and real-sandbox policies still
+need coordination; do not report checker self-tests as live-cache coverage or
+protocol failure/retry checks as crash-safe external effects.
 
 ## Handoff checklist
 
@@ -203,12 +210,14 @@ after that agreement; do not report testbench self-tests as real-cache coverage.
 - [x] Run testbench self-tests; no real cache/model was exercised.
 - [x] Add offline lifecycle probe-log checks and synthetic regression fixtures.
 - [ ] Agree on baseline/cache capture fields and multi-producer causal ordering.
-- [ ] Review the contract with Arjun; confirm the first implementation revision.
-- [ ] Connect and run T01/T02 against the real server/client on CPU.
-- [ ] Add the remaining core race/failure cases.
+- [x] Map Arjun's documented contract and pin the tested revisions.
+- [x] Connect and run T01/T02 against the real server/client on CPU, at 8 and 32 callers.
+- [x] Add/run task isolation, completion-before-poll, empty results, failure/retry,
+  disconnect, stale publication, and read-only inspection/counter cases.
+- [ ] Add waiter cancellation and additional targeted race/stress schedules.
 - [ ] Integrate whole-turn/call-ID and actual sandbox-restoration tests.
 
 Reference sources inspected: current proposal;
-[course client](https://github.com/abhivijay96/tvclient) interfaces;
-[course server](https://github.com/abhivijay96/tvcache-rust) `types.rs` and
+[team client](https://github.com/cs5470-team9/tvclient) interfaces;
+[team server](https://github.com/cs5470-team9/tvcache-rust) `types.rs` and
 `request_handler.rs`. Reference repositories are not bundled here.

@@ -122,7 +122,7 @@ class TreeTests(unittest.TestCase):
             ("value", 7), ("sandbox_id", {}),
             ("node_id", True), ("node_id", -1), ("node_id", 1.0),
             ("status", "owner"), ("status", None), ("status", []),
-            ("generation", True), ("generation", -1), ("generation", 0),
+            ("generation", True), ("generation", -1),
         ]
         for field, value in mutations:
             with self.subTest(field=field, value=value):
@@ -131,6 +131,19 @@ class TreeTests(unittest.TestCase):
                 with self.assertRaises(AssertionError) as context:
                     inspect_task(dump, "task")
                 self.assertNotIsInstance(context.exception, UnsupportedMetadata)
+
+    def test_generation_zero_is_valid_only_for_the_structural_root(self):
+        dump = dump_tree()
+        dump["task"]["root"]["generation"] = 0
+        self.assertEqual(inspect_task(dump, "task").nodes[()].generation, 0)
+        for path in [("setup A",), ("setup A", "read fixture")]:
+            bad = copy.deepcopy(dump)
+            raw = bad["task"]["root"]
+            for edge in path:
+                raw = raw["children"][edge]
+            raw["generation"] = 0
+            with self.assertRaises(AssertionError):
+                inspect_task(bad, "task")
 
     def test_malformed_legacy_tree_is_not_unsupported(self):
         with self.assertRaises(AssertionError) as context:

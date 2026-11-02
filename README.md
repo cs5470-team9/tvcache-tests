@@ -14,8 +14,64 @@ baseline, poll nodes, start tools, or reserve GPUs. Sample captures and
 self-tests are synthetic fixtures, not evidence that the real cache passed.
 Result files and actual run logs stay local and are ignored by Git.
 
-Verified October 30, 2026: **82 checker self-tests passed, no skips**. No real
-cache, container, model, or GPU was exercised by this verification.
+Verified November 1, 2026: **130 checker self-tests passed, no skips**. That
+command tests the checker only; live client/server results are separate below.
+
+## Live team integration — November 1
+
+The real pending-node client and Rust server are now connected. The first
+live CPU run passed the baseline smoke check, T01/T02, seven additional
+protocol cases, and three implementation-supplied Python suites. A second run
+with 32 contending callers also passed. These are correctness results, not
+DeepSWE performance or real-container restoration results. See
+[integration_status.md](integration_status.md) for revisions, coverage, and limits.
+
+Pending-node support is on **`pending-nodes` in both implementation repos**,
+not their `main` branches. Keep this test repository on `main`; pin the paired
+implementation checkouts to the tested commits:
+
+```bash
+# Place the three repositories beside each other if cloning a fresh workspace.
+git clone https://github.com/cs5470-team9/tvcache-tests.git
+git clone https://github.com/cs5470-team9/tvclient.git
+git clone https://github.com/cs5470-team9/tvcache-rust.git
+git -C tvclient switch --detach 57d3727fe77200a4d598b7380b6aba5bd23641f7
+git -C tvcache-rust switch --detach aa239b6a3b64c485b0189f55ced19926dd6df621
+
+cd tvcache-rust
+cargo test --locked
+cargo build --locked
+cd ../tvcache-tests
+python3 run_checks.py integration --launch-local-server \
+  --server-source ../tvcache-rust --client-source ../tvclient \
+  --upstream-tests --summary --output results/integration-001.json
+```
+
+Rust/Cargo is needed to build the real server; the Python client and checker
+need no extra Python packages. The integration command refuses dirty source
+checkouts, selects a free port, starts its own server with eviction disabled,
+and stops that owned process in cleanup. It never attaches to an existing
+server or reserves a GPU. Existing report files are not overwritten.
+
+**The current implementation binds all network interfaces.** The launch flag
+explicitly opts in to a short-lived, dedicated server containing synthetic
+fixtures only. Do not use it to hold secrets or on an untrusted network. Local
+checks connect through `127.0.0.1`. Server logs, raw/normalized snapshots, source
+revisions, binary hash, and individual outcomes are retained locally under
+`results/`, which is not published.
+
+For a server you already deliberately started for testing, use the built-in
+adapter without launching another server:
+
+```bash
+python3 run_checks.py pending --dedicated-server \
+  --client-source ../tvclient --host 127.0.0.1 --port 7879 \
+  --case all --output results/pending-001.json
+```
+
+These active probes/gates belong in correctness runs. Measured rollouts should
+still use buffered logs checked afterwards; the actual JSONL probe logger and
+multi-producer causal joining remain integration work, not a completed feature.
 
 ## Run now: test the testbench
 
@@ -77,12 +133,19 @@ generation, value, and sandbox reference. It rejects duplicate IDs, malformed
 trees, pending nodes with completed values, and ready nodes with absent results.
 An empty string is a valid ready result.
 
-The current baseline dump does not contain the proposed IDs/lifecycle metadata.
+The original baseline on the implementation repositories' `main` branches does
+not contain the proposed IDs/lifecycle metadata.
 Use `--legacy` to check its structure and values without inferring node states.
 Without `--legacy`, missing metadata is reported as blocked—not as passing
 pending-node coverage. Stable-identity checks require actual metadata.
 
-## Opt in later: real sequential-cache smoke check
+For a raw dump from the team's `pending-nodes` revision, add `--team-format`.
+This explicitly maps its ready/null root to `root` and valueless ready child
+nodes to structural `prefix`; real IDs, generations, values, and edges remain
+unchanged. An empty string stays a ready result. Root generation 0 is accepted
+only for the structural root.
+
+## Standalone sequential-cache smoke check
 
 Only run against an approved dedicated test server. The command writes small
 fixtures under a fresh UUID task namespace; it does not delete cache entries,
@@ -106,17 +169,19 @@ snapshots are included in the report. Missing node metadata stays labeled
 
 Use a compatible dedicated [course server](https://github.com/abhivijay96/tvcache-rust).
 A connection error fails
-the check; it is not converted into a skip or a pass. No real-server check has
-been run as part of the initial implementation.
+the check; it is not converted into a skip or a pass. Add `--team-format` when
+using the feature branch's raw dump encoding. The integration command above
+already selects that mapping and keeps the unmodified raw checkpoints too.
 
 ## T01 and T02: adapter to Arjun's real implementation
 
-The scenarios are implemented in `tvcache_checks/scenarios.py`. They use an
-adapter because the pending-node wire/API has not yet been agreed and the
-current course server does not implement it. There is no bundled replacement
-cache or simulated server that could be mistaken for the real implementation.
+The scenarios are implemented in `tvcache_checks/scenarios.py`. The built-in
+adapter in `tvcache_checks/team_adapter.py` calls the real `Claim`, `Inspect`,
+`Publish`, and `DumpAll` APIs on the team's `pending-nodes` revisions. There is
+no bundled replacement cache or simulated server. The original baseline client
+is detected as unsupported before opening a connection.
 
-Arjun's adapter module should provide a synchronous factory returning a fresh
+For other implementations, an adapter module can provide a synchronous factory returning a fresh
 async client context manager. Each client implements
 `tvcache_checks.contracts.PendingClient`:
 
@@ -132,9 +197,13 @@ These names are local adapter methods, not a demand to use the same wire names.
 Root/prefix/ready/pending/failed metadata can be normalized in the adapter;
 do not invent missing server IDs or states simply to pass assertions.
 The factory must open a distinct connection/context for every invocation.
-Do not share one existing `TVCacheClient` concurrently across the callers.
+The built-in adapter does this. Real ownership is enforced by the server's
+connection identity and generation, not a wire token. Its private local marker
+only guards against accidental publication through a different/reconnected
+adapter. Claim-result sandbox leases are released without closing the owner
+connection. Private ownership markers are never logged.
 
-Once a real adapter is available, put its directory on `PYTHONPATH` and run:
+To supply a different adapter, put its directory on `PYTHONPATH` and run:
 
 ```bash
 PYTHONPATH=/path/to/arjuns/adapter \
@@ -145,8 +214,8 @@ python3 run_checks.py pending \
 
 The adapter should configure its host/port through its own configuration and
 must point to a dedicated test instance. No credentials should be hardcoded
-or included in reports. Without `--adapter`, this mode records `blocked` and
-does not connect to anything.
+or included in reports. Without either `--adapter` or `--client-source`, this
+mode records `blocked` and does not connect to anything.
 
 ### What the scenarios actually verify
 
@@ -166,9 +235,11 @@ Setup prefix nodes are controlled test fixtures published through the same
 claim API. They represent state histories for this protocol test; they are not
 evidence of real setup-command execution or container restoration.
 
-The scenarios do **not yet cover** owner failure/takeover, real sandbox state
-restoration, whole-turn layouts, or actual harness call-ID mapping. These remain
-in the [test matrix](test_plan.md). `--timeout` is a hang deadline, not a
+T01/T02 themselves do not cover owner failure/takeover; the integration command
+runs separate protocol cases for failure, retry, disconnect, and stale owners.
+Real sandbox state restoration, whole-turn layouts, waiter cancellation, and
+actual harness call-ID mapping remain in the [test matrix](test_plan.md).
+`--timeout` is a hang deadline, not a
 performance target. Reports log public outcomes but omit owner publication tokens.
 
 ## Files
@@ -179,6 +250,9 @@ performance target. Reports log public outcomes but omit owner publication token
 - `tvcache_checks/scenarios.py`: gated T01/T02 scenarios and controlled tool.
 - `tvcache_checks/baseline.py`: real sequential client smoke check.
 - `tvcache_checks/probes.py`: offline JSONL lifecycle and snapshot validation.
+- `tvcache_checks/team_adapter.py`: adapter to the team's real pending-node API.
+- `tvcache_checks/lifecycle_cases.py`: isolated failure/identity/inspection cases.
+- `tvcache_checks/integration.py`: owned-server launcher, provenance, and cleanup.
 - `unit/`: self-tests of parsing, assertions, contracts, and synchronization.
 - [Interface proposal](minimal_interface_proposal.md) and
   [Arjun checklist](arjun_interface_checklist.md): handoff requirements.

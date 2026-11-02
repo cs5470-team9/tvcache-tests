@@ -9,11 +9,12 @@ drains a shared server's sandbox-reclamation queue.
 from __future__ import annotations
 
 import importlib
+import copy
 import re
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 def make_task_id(namespace: str) -> str:
@@ -84,6 +85,7 @@ async def run_baseline(
     *,
     timeout: float = 5.0,
     retries: int = 0,
+    dump_transform: Callable[[dict], dict] | None = None,
 ) -> dict:
     """Exercise real Insert/Find/DumpAll operations; errors fail the run.
 
@@ -100,6 +102,7 @@ async def run_baseline(
     task_id = make_task_id(namespace)
     client_class = load_real_client(client_source)
     snapshots: list[dict] = []
+    raw_snapshots: list[dict] = []
     checks: list[dict] = []
     expected_values: dict[tuple[str, ...], str] = {}
     fixture = [
@@ -117,7 +120,11 @@ async def run_baseline(
         checks.append({"name": "fresh task namespace", "passed": True})
 
         async def capture(stage: str) -> None:
-            snapshot = inspect_task(await client.dump_all(), task_id, require_metadata=False)
+            raw = await client.dump_all()
+            task_dump = {task_id: raw[task_id]}
+            raw_snapshots.append({"stage": stage, "dump": task_dump})
+            normalized = dump_transform(copy.deepcopy(task_dump)) if dump_transform is not None else task_dump
+            snapshot = inspect_task(normalized, task_id, require_metadata=False)
             snapshot.assert_shape({(), *expected_values})
             for path, expected in expected_values.items():
                 actual = snapshot.nodes[path]
@@ -162,6 +169,7 @@ async def run_baseline(
         "task_id": task_id,
         "checks": checks,
         "snapshots": snapshots,
+        "raw_snapshots": raw_snapshots,
         "node_metadata_available": not snapshots[-1]["legacy"],
         "limitations": [
             "Legacy servers expose no explicit lifecycle state or node ID; missing fields are not inferred.",

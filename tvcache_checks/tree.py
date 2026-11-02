@@ -157,7 +157,8 @@ def inspect_task(
 
         generation = None
         if "generation" in raw and raw["generation"] is not None:
-            generation = _integer(raw["generation"], f"Node {path!r} generation", 1)
+            minimum = 0 if not path and state == "root" else 1
+            generation = _integer(raw["generation"], f"Node {path!r} generation", minimum)
         elif state in _EXECUTION_STATES:
             legacy = True
             missing_metadata.append(f"{path!r}: generation")

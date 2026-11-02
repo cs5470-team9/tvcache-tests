@@ -2,6 +2,11 @@
 
 Draft for discussion with Arjun · Chia-Heng Liu · October 28, 2026
 
+November 1 update: Arjun's [implemented contract](https://github.com/cs5470-team9/tvcache-rust/blob/aa239b6a3b64c485b0189f55ced19926dd6df621/docs/pending_nodes.md)
+answers the initial handoff. The built-in team adapter is connected and live
+CPU checks pass; see [integration_status.md](integration_status.md). The
+questions below are retained as the original checklist, not missing core APIs.
+
 Suggested low-cost interface: keep task/path keys, assign each new node a
 per-task integer ID, return that ID with owner/pending/ready outcomes, and expose
 it in the existing `DumpAll`. No full state hash, UUID, separate parent index,
@@ -47,5 +52,7 @@ connections, execution gates, and an actual tool-entry counter. No GPU or model
 is needed. Initial state fixtures do not substitute for later real-sandbox
 restoration tests.
 
-The broader cases are in [test_plan.md](test_plan.md). This checklist has not
-been sent to Arjun; API names and recovery behavior remain to be agreed.
+The broader cases are in [test_plan.md](test_plan.md). Core APIs now map to the
+implemented Claim/Inspect/Publish contract. Whole-turn layout, actual harness
+call-ID handling, real sandbox restoration, and buffered capture integration
+remain to be settled/tested with their respective owners.
