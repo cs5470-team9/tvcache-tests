@@ -27,9 +27,11 @@ reproduces `expected ForkCost, got ClaimResponse`; the fixed candidate passes
 all ten live cases, the sequential smoke check, and existing implementation
 suites. Seven permanent client transport regressions also pass.
 
-The client fix is [PR #1](https://github.com/cs5470-team9/tvclient/pull/1), with
-Arjun's review requested; it has **not** been merged into `pending-nodes`.
-Use the fixed candidate SHA below for the full current suite. The original
+The client fix in [PR #1](https://github.com/cs5470-team9/tvclient/pull/1) has
+merged, and the tested version is now on **`tvclient/main` at `a910f4d`**.
+It includes opt-in coalescing plus the cancellation fix. The server still needs
+its `pending-nodes` revision for `coalesce=True`; server `main` is unchanged.
+Use the paired SHAs below for the full current suite. The original
 client `57d3727` is an intentional failing negative control for T08, not the
 latest all-green pin. See [t08_status.md](t08_status.md) for before/after evidence,
 reproduction, and ownership/lease limits.
@@ -44,17 +46,16 @@ DeepSWE performance or real-container restoration results. See
 [integration_status.md](integration_status.md) for the original November 1
 coverage and limits, and the T08 update above for current candidate coverage.
 
-Pending-node support is on **`pending-nodes` in both implementation repos**,
-not their `main` branches. The cancellation fix is on
-`fix/t08-waiter-cancellation`, based on `pending-nodes`. Keep this test repository
-on `main`; pin the paired implementation checkouts to the tested commits:
+The tested client is on `main`; the tested server is still on `pending-nodes`.
+Keep this test repository on `main` and pin the paired implementation checkouts
+to the verified commits:
 
 ```bash
 # Place the three repositories beside each other if cloning a fresh workspace.
 git clone https://github.com/cs5470-team9/tvcache-tests.git
 git clone https://github.com/cs5470-team9/tvclient.git
 git clone https://github.com/cs5470-team9/tvcache-rust.git
-git -C tvclient switch --detach 5eda159648ccc40164d08c72a97f8d2184ba0dde
+git -C tvclient switch --detach a910f4d8afa68aeed11c86995692c13410261a4e
 git -C tvcache-rust switch --detach aa239b6a3b64c485b0189f55ced19926dd6df621
 
 cd tvcache-rust

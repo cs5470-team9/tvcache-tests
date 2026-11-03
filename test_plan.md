@@ -4,7 +4,9 @@ Owner: Chia-Heng Liu (proposed) · October 28, 2026
 
 November 3 update: T08 waiter cancellation is implemented and passes with client
 candidate `5eda159`; the old client `57d3727` fails the live negative control.
-Arjun's review is requested in [client PR #1](https://github.com/cs5470-team9/tvclient/pull/1).
+The fix in [client PR #1](https://github.com/cs5470-team9/tvclient/pull/1) is now
+merged and promoted to team client `main` at `a910f4d`; the server stays pinned
+to its tested `pending-nodes` revision.
 See [t08_status.md](t08_status.md) for exact coverage and limits. Current checker
 self-tests: 133 passing; live suite: ten cases plus sequential smoke.
 
@@ -221,7 +223,7 @@ protocol failure/retry checks as crash-safe external effects.
 - [x] Add/run task isolation, completion-before-poll, empty results, failure/retry,
   disconnect, stale publication, and read-only inspection/counter cases.
 - [x] Add waiter cancellation, reconnect/response-alignment checks, and permanent client regressions.
-- [ ] Obtain Arjun's review/merge decision on the isolated client cancellation fix.
+- [x] Merge the isolated client cancellation fix and promote the tested version to team main at the user's request.
 - [ ] Add additional targeted race/stress schedules and real-command timeout containment.
 - [ ] Integrate whole-turn/call-ID and actual sandbox-restoration tests.
 
