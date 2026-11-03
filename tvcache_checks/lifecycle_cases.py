@@ -1,7 +1,8 @@
 """Opt-in protocol checks against the real pending-node client and server.
 
-Only tiny string fixtures are published. No tool, sandbox, model, eviction,
-global drain, or fake cache is involved. These cases establish protocol
+Only tiny string fixtures are published. T08 uses one gated in-process fixture
+execution; no shell tool, sandbox, model, eviction, global drain, or fake cache
+is involved. These cases establish protocol
 behavior, not exactly-once external effects or correctness after a real crash.
 """
 
@@ -193,6 +194,141 @@ def _wait_ms(timeout: float) -> int:
     return max(1, min(2000, int(timeout * 1000 / 2)))
 
 
+class _DecodeCheckpoint:
+    """Observe real response decoding without buffering or inventing any bytes.
+
+    decode_response reaches readexactly only after the real request was written
+    and drained. This establishes the cancellation point without timing sleeps;
+    it does not force the server's internal long-poll subscription schedule.
+    """
+
+    def __init__(self, reader):
+        self.reader = reader
+        self.entered = asyncio.Event()
+
+    async def readexactly(self, count: int) -> bytes:
+        self.entered.set()
+        return await self.reader.readexactly(count)
+
+    def __getattr__(self, name):
+        return getattr(self.reader, name)
+
+
+async def _waiter_cancellation(client_class, host, port, timeout, report):
+    task_id = report["task_ids"][0]
+    report["limitations"] = [
+        "One gated in-process execution, not a real shell command, container, or external side effect.",
+        "Root-level Inspect holds no sandbox lease; this does not prove reclamation of an interrupted Find/Claim lease.",
+        "Decoder-entry events establish sent requests, not a forced server-internal subscription interleaving.",
+        "Owner and surviving waiter use separate connections; cancellation may fail other claims owned by the cancelled connection.",
+    ]
+    async with _clients(client_class, host, port, timeout, 4) as (owner, cancelled, survivor, observer):
+        await _cold(observer, report, [task_id])
+        original = await _claim(owner, report, task_id)
+        first_waiter = await _claim(cancelled, report, task_id)
+        second_waiter = await _claim(survivor, report, task_id)
+        _ensure(original.status == OWNER and first_waiter.status == second_waiter.status == PENDING,
+                "Cancellation fixture requires one owner and two pending waiters")
+        _same_node(first_waiter, original)
+        _same_node(second_waiter, original)
+        marker = 2345
+        _ensure(await observer.report_fork_cost(task_id, marker) == marker, "Fork-cost response sentinel was not seeded")
+        pending_dump = await _capture(observer, report, "pending-before-cancellation", [task_id])
+        _ensure(pending_dump[task_id]["sandbox_references"] == {}, "Root-level fixture unexpectedly leased a sandbox")
+
+        release, entered = asyncio.Event(), asyncio.Event()
+        execution_count = 0
+        expected_value = "T08-owner-result"
+
+        async def execute_owner():
+            nonlocal execution_count
+            execution_count += 1
+            entered.set()
+            await release.wait()
+            await _publish(owner, report, task_id, original.generation, expected_value)
+            return expected_value
+
+        async def wait_ready(client):
+            while True:
+                result = await _inspect(client, report, task_id, wait_ms=_wait_ms(timeout))
+                if result.status == READY:
+                    return result
+                _ensure(result.status == PENDING, "Cancellation disrupted another claimant's lifecycle")
+
+        old_writer = cancelled.writer
+        cancelled_reader = _DecodeCheckpoint(cancelled.reader)
+        survivor_reader = _DecodeCheckpoint(survivor.reader)
+        cancelled.reader, survivor.reader = cancelled_reader, survivor_reader
+        owner_task = asyncio.create_task(execute_owner())
+        cancelled_task = survivor_task = None
+        try:
+            await entered.wait()
+            cancelled_task = asyncio.create_task(wait_ready(cancelled))
+            survivor_task = asyncio.create_task(wait_ready(survivor))
+            await cancelled_reader.entered.wait()
+            await survivor_reader.entered.wait()
+            _ensure(not cancelled_task.done() and not survivor_task.done() and not owner_task.done(),
+                    "All participants must still be active while the owner gate is held")
+            cancelled_task.cancel()
+            try:
+                await cancelled_task
+            except asyncio.CancelledError:
+                report["observations"].append({"operation": "cancel-in-flight-inspect", "cancelled_error_preserved": True})
+            else:
+                raise AssertionError("Cancelled waiter suppressed cancellation")
+            detached = cancelled.reader is None and cancelled.writer is None
+            report["connection_detached_after_cancel"] = detached
+            still_pending = await _inspect(observer, report, task_id)
+            _ensure(still_pending.status == PENDING and not owner_task.done() and not survivor_task.done(),
+                    "Cancelling one waiter disrupted the owner or surviving waiter")
+            _same_node(still_pending, original)
+            await _capture(observer, report, "owner-and-survivor-unaffected", [task_id])
+
+            release.set()
+            _ensure(await owner_task == expected_value, "Owner did not finish the controlled execution")
+            surviving_result = await survivor_task
+            _ensure(surviving_result.value == expected_value, "Surviving waiter received the wrong result")
+            _same_node(surviving_result, original)
+            report["checks"] += ["Cancellation preserved CancelledError",
+                                   "Owner and surviving waiter completed with original node ID/generation"]
+            report["tool_executions"] = execution_count
+            await _capture(observer, report, "owner-published-survivor-completed", [task_id])
+
+            # Deliberately use another response type. On the unfixed client the
+            # late real Inspect frame is consumed here as the ForkCost reply.
+            try:
+                recovered = await cancelled.get_fork_cost(task_id)
+            except Exception as error:
+                report["reuse_error"] = {"type": type(error).__name__, "message": str(error)}
+                raise
+            _ensure(recovered == marker, "Reused client consumed the wrong response")
+            _ensure(detached and cancelled.writer is not old_writer,
+                    "Cancelled transaction was not discarded before opening a fresh connection")
+            report["reconnected_after_cancel"] = True
+            ready = await _inspect(cancelled, report, task_id)
+            _ensure(ready.status == READY and ready.value == expected_value, "Reconnected client received a stale result")
+            _same_node(ready, original)
+            warm = await _claim(cancelled, report, task_id)
+            _ensure(warm.status == READY and warm.value == expected_value, "Warm reuse after cancellation missed")
+            _same_node(warm, original)
+            _ensure(execution_count == 1, "Cancellation or client reuse caused duplicate fixture execution")
+            final = await _capture(observer, report, "ready-after-reconnect-and-warm-hit", [task_id])
+            graph = final[task_id]
+            _ensure(graph["sandbox_references"] == {}, "Fixture left a sandbox lease")
+            _ensure(set(graph["root"]["children"]) == {_ENTRY} and not _node(final, task_id)["children"],
+                    "Cancellation or warm reuse added unexpected tree nodes")
+            report["checks"] += ["Client reconnects and decodes ForkCost rather than the cancelled Inspect response",
+                                   "Fresh Inspect/warm claim preserve the completed value, node ID and generation",
+                                   "Exactly one controlled execution; no pending fixture node or introduced sandbox lease"]
+        finally:
+            release.set()
+            tasks = [task for task in (owner_task, cancelled_task, survivor_task) if task is not None]
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def _disconnect(client_class, host, port, timeout, report):
     task_id = report["task_ids"][0]
     async with _clients(client_class, host, port, timeout, 2) as (owner, waiter):
@@ -314,6 +450,7 @@ async def run_lifecycle_checks(client_class, host: str, port: int, namespace: st
         ("T05", "Empty ready result", _empty_result, 1),
         ("T06", "Explicit failure and retry", _failure_retry, 1),
         ("T07", "Owner disconnect and waiting caller", _disconnect, 1),
+        ("T08", "Waiter cancellation and clean connection reuse", _waiter_cancellation, 1),
         ("T09", "Stale generation and wrong-connection publication", _stale_publication, 1),
         ("I01", "Read-only inspection and counters", _readonly_inspection, 1),
     ]

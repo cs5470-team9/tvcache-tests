@@ -1,8 +1,9 @@
 # TVCache correctness testbench
 
 Testing owner: Chia-Heng Liu. Python 3.10+; standard library only for offline
-checks. Run commands from this repository's root (or `Project/testing` in the
-original SysML workspace).
+checks. Run commands from this repository's root. In the original SysML
+workspace the canonical checkout is `Project/team_repos/tvcache-tests`;
+`Project/testing` is an older export.
 
 This implements the testbench, **not** Arjun's pending-node cache. No protocol
 opcodes, cache entries, ownership rules, or reference-repository code have been
@@ -14,34 +15,53 @@ baseline, poll nodes, start tools, or reserve GPUs. Sample captures and
 self-tests are synthetic fixtures, not evidence that the real cache passed.
 Result files and actual run logs stay local and are ignored by Git.
 
-Verified November 1, 2026: **130 checker self-tests passed, no skips**. That
+Verified November 3, 2026: **133 checker self-tests passed, no skips**. That
 command tests the checker only; live client/server results are separate below.
 
-## Live team integration — November 1
+## T08 cancellation update — November 3
+
+T08 now checks cancellation after an actual Inspect request is sent: one owner
+and the surviving waiter complete, while the cancelled client must discard its
+old connection and reconnect before making another request. The old client
+reproduces `expected ForkCost, got ClaimResponse`; the fixed candidate passes
+all ten live cases, the sequential smoke check, and existing implementation
+suites. Seven permanent client transport regressions also pass.
+
+The client fix is [PR #1](https://github.com/cs5470-team9/tvclient/pull/1), with
+Arjun's review requested; it has **not** been merged into `pending-nodes`.
+Use the fixed candidate SHA below for the full current suite. The original
+client `57d3727` is an intentional failing negative control for T08, not the
+latest all-green pin. See [t08_status.md](t08_status.md) for before/after evidence,
+reproduction, and ownership/lease limits.
+
+## Live team integration
 
 The real pending-node client and Rust server are now connected. The first
 live CPU run passed the baseline smoke check, T01/T02, seven additional
 protocol cases, and three implementation-supplied Python suites. A second run
 with 32 contending callers also passed. These are correctness results, not
 DeepSWE performance or real-container restoration results. See
-[integration_status.md](integration_status.md) for revisions, coverage, and limits.
+[integration_status.md](integration_status.md) for the original November 1
+coverage and limits, and the T08 update above for current candidate coverage.
 
 Pending-node support is on **`pending-nodes` in both implementation repos**,
-not their `main` branches. Keep this test repository on `main`; pin the paired
-implementation checkouts to the tested commits:
+not their `main` branches. The cancellation fix is on
+`fix/t08-waiter-cancellation`, based on `pending-nodes`. Keep this test repository
+on `main`; pin the paired implementation checkouts to the tested commits:
 
 ```bash
 # Place the three repositories beside each other if cloning a fresh workspace.
 git clone https://github.com/cs5470-team9/tvcache-tests.git
 git clone https://github.com/cs5470-team9/tvclient.git
 git clone https://github.com/cs5470-team9/tvcache-rust.git
-git -C tvclient switch --detach 57d3727fe77200a4d598b7380b6aba5bd23641f7
+git -C tvclient switch --detach 5eda159648ccc40164d08c72a97f8d2184ba0dde
 git -C tvcache-rust switch --detach aa239b6a3b64c485b0189f55ced19926dd6df621
 
 cd tvcache-rust
 cargo test --locked
 cargo build --locked
 cd ../tvcache-tests
+PYTHONPATH=../tvclient python3 -m unittest discover -s ../tvclient/tests -v
 python3 run_checks.py integration --launch-local-server \
   --server-source ../tvcache-rust --client-source ../tvclient \
   --upstream-tests --summary --output results/integration-001.json
@@ -237,7 +257,9 @@ evidence of real setup-command execution or container restoration.
 
 T01/T02 themselves do not cover owner failure/takeover; the integration command
 runs separate protocol cases for failure, retry, disconnect, and stale owners.
-Real sandbox state restoration, whole-turn layouts, waiter cancellation, and
+T08 separately verifies waiter cancellation/connection reuse with a gated
+in-process fixture. It does not test interrupted Find/Claim lease recovery.
+Real sandbox state restoration, whole-turn layouts, and
 actual harness call-ID mapping remain in the [test matrix](test_plan.md).
 `--timeout` is a hang deadline, not a
 performance target. Reports log public outcomes but omit owner publication tokens.

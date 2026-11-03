@@ -1,5 +1,10 @@
 # Live integration status
 
+Historical November 1 receipt. The current suite additionally includes T08;
+see [the November 3 update](t08_status.md) for its reproduced failure, tested
+client-fix candidate, and requested Arjun review. The old client pin below does
+not pass the new cancellation regression.
+
 November 1, 2026 (America/New_York). Runs used this Mac's CPU, with no NERSC job,
 GPU allocation, model serving, or actual container backend.
 
